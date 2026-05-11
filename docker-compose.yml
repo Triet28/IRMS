@@ -1,0 +1,170 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: irms-postgres
+    environment:
+      POSTGRES_DB: irms
+      POSTGRES_USER: irms_admin
+      POSTGRES_PASSWORD: irms_admin_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U irms_admin -d irms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - irms-network
+
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: irms-auth
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/irms
+      SPRING_DATASOURCE_USERNAME: auth_user
+      SPRING_DATASOURCE_PASSWORD: auth_pass
+      JWT_SECRET: irms-super-secret-key-change-in-production-must-be-at-least-256-bits-long
+      JWT_EXPIRATION_MS: 86400000
+      SERVER_PORT: 8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - irms-network
+    restart: on-failure
+
+  menu-service:
+    build:
+      context: ./backend/menu-service
+      dockerfile: Dockerfile
+    container_name: irms-menu
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/irms
+      SPRING_DATASOURCE_USERNAME: menu_user
+      SPRING_DATASOURCE_PASSWORD: menu_pass
+      JWT_SECRET: irms-super-secret-key-change-in-production-must-be-at-least-256-bits-long
+      SERVER_PORT: 8082
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - irms-network
+    restart: on-failure
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: irms-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: irms_rabbit
+      RABBITMQ_DEFAULT_PASS: irms_rabbit_pass
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - irms-network
+
+  order-service:
+    build:
+      context: ./backend/order-service
+      dockerfile: Dockerfile
+    container_name: irms-order
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/irms
+      SPRING_DATASOURCE_USERNAME: order_user
+      SPRING_DATASOURCE_PASSWORD: order_pass
+      JWT_SECRET: irms-super-secret-key-change-in-production-must-be-at-least-256-bits-long
+      MENU_SERVICE_URL: http://menu-service:8082
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: irms_rabbit
+      SPRING_RABBITMQ_PASSWORD: irms_rabbit_pass
+      SERVER_PORT: 8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+      menu-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - irms-network
+    restart: on-failure
+
+  billing-service:
+    build:
+      context: ./backend/billing-service
+      dockerfile: Dockerfile
+    container_name: irms-billing
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/irms
+      SPRING_DATASOURCE_USERNAME: billing_user
+      SPRING_DATASOURCE_PASSWORD: billing_pass
+      JWT_SECRET: irms-super-secret-key-change-in-production-must-be-at-least-256-bits-long
+      ORDER_SERVICE_URL: http://order-service:8083
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: irms_rabbit
+      SPRING_RABBITMQ_PASSWORD: irms_rabbit_pass
+      VAT_RATE: "0.10"
+      SERVER_PORT: 8084
+    depends_on:
+      postgres:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - irms-network
+    restart: on-failure
+
+  staff-app:
+    build:
+      context: ./frontend/staff-app
+      dockerfile: Dockerfile
+    container_name: irms-staff
+    ports:
+      - "3000:80"
+    depends_on:
+      - auth-service
+      - menu-service
+      - order-service
+      - billing-service
+    networks:
+      - irms-network
+
+  customer-app:
+    build:
+      context: ./frontend/customer-app
+      dockerfile: Dockerfile
+    container_name: irms-customer
+    ports:
+      - "3001:80"
+    depends_on:
+      - menu-service
+      - order-service
+    networks:
+      - irms-network
+
+networks:
+  irms-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -1,0 +1,2 @@
+ALTER TABLE order_schema.orders
+    ADD COLUMN IF NOT EXISTS is_combo BOOLEAN NOT NULL DEFAULT FALSE;

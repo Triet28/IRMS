@@ -1,0 +1,37 @@
+# Maven
+target/
+*.jar
+*.war
+*.class
+.mvn/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node / React
+node_modules/
+dist/
+build/
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker volumes
+postgres_data/
+
+# Spring Boot
+application-local.yml

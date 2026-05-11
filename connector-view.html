@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>IRMS — Connector View</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; font-family: 'Segoe UI', sans-serif; color: #e2e8f0; min-height: 100vh; }
+
+  h1 { text-align: center; padding: 22px 0 4px; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: #f8fafc; }
+  .subtitle { text-align: center; color: #64748b; font-size: 12px; margin-bottom: 18px; letter-spacing: 0.5px; }
+
+  /* Legend */
+  .legend {
+    display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;
+    margin: 0 auto 20px; max-width: 800px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #94a3b8; }
+  .legend-line { width: 36px; height: 3px; border-radius: 2px; }
+  .legend-line.rest   { background: #3b82f6; }
+  .legend-line.ws     { background: #8b5cf6; border-top: 3px dashed #8b5cf6; background: none; }
+  .legend-line.amqp   { background: #f59e0b; }
+  .legend-line.jdbc   { background: #10b981; border-top: 3px dotted #10b981; background: none; }
+
+  /* Diagram wrapper */
+  .diagram-wrap { position: relative; width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 20px 40px; }
+  svg.arrows { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+
+  /* Layers */
+  .layer { display: flex; justify-content: center; gap: 20px; margin-bottom: 0; position: relative; }
+  .layer-label {
+    text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: 2px;
+    color: #475569; margin-bottom: 10px; margin-top: 28px;
+  }
+
+  /* Node cards */
+  .node {
+    border-radius: 10px; padding: 12px 16px; width: 155px; text-align: center;
+    position: relative; border: 1.5px solid transparent; transition: box-shadow 0.2s;
+  }
+  .node-icon { font-size: 22px; margin-bottom: 4px; }
+  .node-name { font-size: 13px; font-weight: 700; }
+  .node-port { font-size: 10px; margin-top: 3px; opacity: 0.6; font-family: monospace; }
+  .node-tech { font-size: 10px; margin-top: 2px; opacity: 0.5; }
+
+  /* Frontend */
+  .fe { background: #1e293b; border-color: #334155; }
+  .fe .node-name { color: #38bdf8; }
+
+  /* Backend services */
+  .svc { background: #1a1f2e; border-color: #2d3748; }
+  .svc.auth .node-name { color: #fb923c; }
+  .svc.menu .node-name { color: #4ade80; }
+  .svc.order .node-name { color: #a78bfa; }
+  .svc.billing .node-name { color: #f472b6; }
+
+  /* Infra */
+  .infra { background: #141a24; border-color: #253045; }
+  .infra.pg .node-name { color: #60a5fa; }
+  .infra.mq .node-name { color: #fbbf24; }
+
+  /* DB schema breakdown */
+  .schemas { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+  .schema-tag {
+    font-size: 9px; padding: 1px 6px; border-radius: 10px; opacity: 0.85; font-family: monospace;
+  }
+  .schema-auth   { background: #7c2d1280; color: #fdba74; }
+  .schema-menu   { background: #14532d80; color: #86efac; }
+  .schema-order  { background: #3b0764a0; color: #c4b5fd; }
+  .schema-billing { background: #83184480; color: #f9a8d4; }
+
+  /* RabbitMQ queues */
+  .queues { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+  .queue-tag {
+    font-size: 9px; padding: 1px 6px; border-radius: 10px; background: #78350f60; color: #fde68a; font-family: monospace;
+  }
+
+  /* Arrow styles in SVG */
+  .arrow-rest   { stroke: #3b82f6; stroke-width: 2; fill: none; }
+  .arrow-ws     { stroke: #8b5cf6; stroke-width: 2; fill: none; stroke-dasharray: 6,4; }
+  .arrow-amqp   { stroke: #f59e0b; stroke-width: 2.5; fill: none; }
+  .arrow-jdbc   { stroke: #10b981; stroke-width: 1.5; fill: none; stroke-dasharray: 3,4; }
+  .arrowhead-rest    { fill: #3b82f6; }
+  .arrowhead-ws      { fill: #8b5cf6; }
+  .arrowhead-amqp    { fill: #f59e0b; }
+  .arrowhead-jdbc    { fill: #10b981; }
+  .arrow-label {
+    font-size: 9.5px; fill: #94a3b8; font-family: 'Segoe UI', sans-serif;
+  }
+</style>
+</head>
+<body>
+
+<h1>IRMS — Connector View</h1>
+<p class="subtitle">Intelligent Restaurant Management System · Software Architecture HK252</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-line rest"></div> REST / HTTP</div>
+  <div class="legend-item"><div class="legend-line ws"></div> WebSocket / STOMP</div>
+  <div class="legend-item"><div class="legend-line amqp"></div> AMQP (RabbitMQ)</div>
+  <div class="legend-item"><div class="legend-line jdbc"></div> JDBC / SQL</div>
+</div>
+
+<div class="diagram-wrap" id="diagram">
+
+  <!-- SVG arrows rendered after layout -->
+  <svg class="arrows" id="svg-arrows">
+    <defs>
+      <marker id="ah-rest"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="arrowhead-rest"/></marker>
+      <marker id="ah-ws"    markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="arrowhead-ws"/></marker>
+      <marker id="ah-amqp"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="arrowhead-amqp"/></marker>
+      <marker id="ah-jdbc"  markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="arrowhead-jdbc"/></marker>
+      <marker id="ah-rest-r"  markerWidth="8" markerHeight="6" refX="1" refY="3" orient="auto"><polygon points="8 0, 0 3, 8 6" class="arrowhead-rest"/></marker>
+    </defs>
+  </svg>
+
+  <!-- LAYER 1: Frontends -->
+  <p class="layer-label">Frontend (Browser)</p>
+  <div class="layer" id="layer-fe">
+    <div class="node fe" id="staff">
+      <div class="node-icon">🖥️</div>
+      <div class="node-name">staff-app</div>
+      <div class="node-port">:3000</div>
+      <div class="node-tech">React 18 · Vite · Nginx</div>
+    </div>
+    <div class="node fe" id="customer">
+      <div class="node-icon">📱</div>
+      <div class="node-name">customer-app</div>
+      <div class="node-port">:3001</div>
+      <div class="node-tech">React 18 · Vite · Nginx</div>
+    </div>
+  </div>
+
+  <!-- LAYER 2: Backend Services -->
+  <p class="layer-label">Backend Services (Spring Boot 3.2 · Java 17)</p>
+  <div class="layer" id="layer-svc">
+    <div class="node svc auth" id="auth">
+      <div class="node-icon">🔐</div>
+      <div class="node-name">auth-service</div>
+      <div class="node-port">:8081</div>
+      <div class="node-tech">JWT · BCrypt</div>
+    </div>
+    <div class="node svc menu" id="menu">
+      <div class="node-icon">🍽️</div>
+      <div class="node-name">menu-service</div>
+      <div class="node-port">:8082</div>
+      <div class="node-tech">Flyway · JPA</div>
+    </div>
+    <div class="node svc order" id="order">
+      <div class="node-icon">📋</div>
+      <div class="node-name">order-service</div>
+      <div class="node-port">:8083</div>
+      <div class="node-tech">WebSocket · STOMP · AMQP</div>
+    </div>
+    <div class="node svc billing" id="billing">
+      <div class="node-icon">💳</div>
+      <div class="node-name">billing-service</div>
+      <div class="node-port">:8084</div>
+      <div class="node-tech">Strategy · AMQP</div>
+    </div>
+  </div>
+
+  <!-- LAYER 3: Infrastructure -->
+  <p class="layer-label">Infrastructure</p>
+  <div class="layer" id="layer-infra">
+    <div class="node infra pg" id="postgres">
+      <div class="node-icon">🐘</div>
+      <div class="node-name">PostgreSQL 15</div>
+      <div class="node-port">:5432</div>
+      <div class="schemas">
+        <span class="schema-tag schema-auth">auth_schema</span>
+        <span class="schema-tag schema-menu">menu_schema</span>
+        <span class="schema-tag schema-order">order_schema</span>
+        <span class="schema-tag schema-billing">billing_schema</span>
+      </div>
+    </div>
+    <div class="node infra mq" id="rabbitmq">
+      <div class="node-icon">🐇</div>
+      <div class="node-name">RabbitMQ 3</div>
+      <div class="node-port">:5672 · :15672</div>
+      <div class="queues">
+        <span class="queue-tag">order.created</span>
+        <span class="queue-tag">order.status.changed</span>
+        <span class="queue-tag">bill.requested</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Wait for layout, then draw arrows between nodes
+window.addEventListener('load', () => {
+  const svg = document.getElementById('svg-arrows');
+  const wrap = document.getElementById('diagram');
+  const wrapRect = wrap.getBoundingClientRect();
+
+  function c(id) {
+    const el = document.getElementById(id);
+    const r = el.getBoundingClientRect();
+    return {
+      top:    r.top - wrapRect.top,
+      bottom: r.bottom - wrapRect.top,
+      left:   r.left - wrapRect.left,
+      right:  r.right - wrapRect.left,
+      cx:     r.left - wrapRect.left + r.width / 2,
+      cy:     r.top - wrapRect.top + r.height / 2,
+      w: r.width, h: r.height
+    };
+  }
+
+  // Set SVG height to match diagram
+  svg.setAttribute('height', wrap.scrollHeight);
+
+  function line(x1, y1, x2, y2, cls, markEnd, markStart, label, lx, ly) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${x1},${y1} L${x2},${y2}`);
+    path.setAttribute('class', cls);
+    if (markEnd)   path.setAttribute('marker-end',   `url(#ah-${markEnd})`);
+    if (markStart) path.setAttribute('marker-start', `url(#ah-${markStart})`);
+    svg.appendChild(path);
+    if (label) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', lx); t.setAttribute('y', ly);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'arrow-label');
+      t.textContent = label;
+      svg.appendChild(t);
+    }
+  }
+
+  function curve(x1, y1, cx1, cy1, cx2, cy2, x2, y2, cls, markEnd, label, lx, ly) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
+    path.setAttribute('class', cls);
+    if (markEnd) path.setAttribute('marker-end', `url(#ah-${markEnd})`);
+    svg.appendChild(path);
+    if (label) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', lx); t.setAttribute('y', ly);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'arrow-label');
+      t.textContent = label;
+      svg.appendChild(t);
+    }
+  }
+
+  const STAFF    = c('staff');
+  const CUSTOMER = c('customer');
+  const AUTH     = c('auth');
+  const MENU     = c('menu');
+  const ORDER    = c('order');
+  const BILLING  = c('billing');
+  const PG       = c('postgres');
+  const MQ       = c('rabbitmq');
+
+  // ── FRONTEND → BACKEND ──────────────────────────────────────────
+
+  // staff → auth (REST)
+  line(STAFF.cx - 30, STAFF.bottom, AUTH.cx, AUTH.top,
+    'arrow-rest', 'rest', null, 'REST', (STAFF.cx-30+AUTH.cx)/2 - 18, (STAFF.bottom+AUTH.top)/2 - 4);
+
+  // staff → menu (REST)
+  line(STAFF.cx - 10, STAFF.bottom, MENU.cx, MENU.top,
+    'arrow-rest', 'rest', null, 'REST', (STAFF.cx-10+MENU.cx)/2 - 14, (STAFF.bottom+MENU.top)/2 - 4);
+
+  // staff → order (REST + WS)
+  line(STAFF.cx + 10, STAFF.bottom, ORDER.cx - 10, ORDER.top,
+    'arrow-rest', 'rest', null, 'REST', (STAFF.cx+10+ORDER.cx-10)/2 + 14, (STAFF.bottom+ORDER.top)/2 - 12);
+  line(STAFF.cx + 22, STAFF.bottom, ORDER.cx + 2, ORDER.top,
+    'arrow-ws', 'ws', null, 'WS/STOMP', (STAFF.cx+22+ORDER.cx+2)/2 + 36, (STAFF.bottom+ORDER.top)/2 + 4);
+
+  // staff → billing (REST)
+  line(STAFF.right, STAFF.cy + 10, BILLING.cx, BILLING.top,
+    'arrow-rest', 'rest', null, 'REST', (STAFF.right+BILLING.cx)/2 + 8, (STAFF.cy+10+BILLING.top)/2 - 4);
+
+  // customer → menu (REST)
+  line(CUSTOMER.cx - 12, CUSTOMER.bottom, MENU.cx + 14, MENU.top,
+    'arrow-rest', 'rest', null, 'REST', (CUSTOMER.cx-12+MENU.cx+14)/2 + 14, (CUSTOMER.bottom+MENU.top)/2 - 4);
+
+  // customer → order (REST + WS)
+  line(CUSTOMER.cx + 8, CUSTOMER.bottom, ORDER.cx + 12, ORDER.top,
+    'arrow-rest', 'rest', null, 'REST', (CUSTOMER.cx+8+ORDER.cx+12)/2 + 14, (CUSTOMER.bottom+ORDER.top)/2 - 12);
+  line(CUSTOMER.cx + 20, CUSTOMER.bottom, ORDER.cx + 24, ORDER.top,
+    'arrow-ws', 'ws', null, 'WS/STOMP', (CUSTOMER.cx+20+ORDER.cx+24)/2 + 38, (CUSTOMER.bottom+ORDER.top)/2 + 4);
+
+  // ── BACKEND → BACKEND ───────────────────────────────────────────
+
+  // order → menu (REST, price snapshot)
+  const omY = (ORDER.top + MENU.top) / 2 + ORDER.h / 2;
+  line(ORDER.left, ORDER.cy - 4, MENU.right + 2, MENU.cy - 4,
+    'arrow-rest', 'rest', null, 'REST\n(price snapshot)', (ORDER.left+MENU.right)/2, ORDER.cy - 14);
+
+  // billing → order (REST, served-orders)
+  line(BILLING.left, BILLING.cy + 4, ORDER.right, ORDER.cy + 4,
+    'arrow-rest', 'rest', null, 'REST (served-orders)', (BILLING.left+ORDER.right)/2, BILLING.cy + 18);
+
+  // ── AMQP ────────────────────────────────────────────────────────
+
+  // order → rabbitmq (AMQP publish)
+  curve(ORDER.cx - 8, ORDER.bottom,
+        ORDER.cx - 8, ORDER.bottom + 40,
+        MQ.cx + 10, MQ.top - 40,
+        MQ.cx + 10, MQ.top,
+        'arrow-amqp', 'amqp', 'AMQP publish',
+        (ORDER.cx + MQ.cx) / 2 - 10, ORDER.bottom + 48);
+
+  // rabbitmq → billing (AMQP consume)
+  curve(MQ.cx - 10, MQ.top,
+        MQ.cx - 10, MQ.top - 40,
+        BILLING.cx, BILLING.bottom + 40,
+        BILLING.cx, BILLING.bottom,
+        'arrow-amqp', 'amqp', 'AMQP consume',
+        (MQ.cx + BILLING.cx) / 2 + 20, BILLING.bottom + 48);
+
+  // ── JDBC ────────────────────────────────────────────────────────
+
+  // auth → postgres
+  line(AUTH.cx, AUTH.bottom, PG.cx - 60, PG.top,
+    'arrow-jdbc', 'jdbc', null, 'auth_schema', (AUTH.cx+PG.cx-60)/2 - 24, (AUTH.bottom+PG.top)/2 - 4);
+
+  // menu → postgres
+  line(MENU.cx, MENU.bottom, PG.cx - 20, PG.top,
+    'arrow-jdbc', 'jdbc', null, 'menu_schema', (MENU.cx+PG.cx-20)/2 - 20, (MENU.bottom+PG.top)/2 - 4);
+
+  // order → postgres
+  line(ORDER.cx, ORDER.bottom, PG.cx + 20, PG.top,
+    'arrow-jdbc', 'jdbc', null, 'order_schema', (ORDER.cx+PG.cx+20)/2 + 26, (ORDER.bottom+PG.top)/2 - 4);
+
+  // billing → postgres
+  line(BILLING.cx, BILLING.bottom, PG.cx + 60, PG.top,
+    'arrow-jdbc', 'jdbc', null, 'billing_schema', (BILLING.cx+PG.cx+60)/2 + 32, (BILLING.bottom+PG.top)/2 - 4);
+});
+</script>
+</body>
+</html>
