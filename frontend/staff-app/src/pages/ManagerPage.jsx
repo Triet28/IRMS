@@ -40,6 +40,10 @@ export default function ManagerPage() {
     try { setSessions(await getOpenSessions()); } catch {}
   }, [setSessions]);
 
+  const [activeTab, setActiveTab]           = useState('sessions');
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [sessionError, setSessionError]       = useState('');
+
   const handleWs = useCallback((_, payload) => {
     if (payload.event === 'BILL_REQUESTED' || payload.event === 'SESSION_OPENED') {
       fetchOpenSessions();
@@ -56,10 +60,6 @@ export default function ManagerPage() {
   ].filter(Boolean);
 
   useWebSocket(wsTopics, handleWs);
-
-  const [activeTab, setActiveTab]           = useState('sessions');
-  const [selectedSession, setSelectedSession] = useState(null);
-  const [sessionError, setSessionError]       = useState('');
   const [showBillModal, setShowBillModal]     = useState(false);
   const [bill, setBill]                       = useState(null);
   const [qrSession, setQrSession]             = useState(null); // session whose QR is shown
