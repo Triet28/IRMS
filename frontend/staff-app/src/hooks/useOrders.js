@@ -35,8 +35,8 @@ export function useOrders() {
     finally { setLoading(false); }
   }, []);
 
-  const addOrder = useCallback(async (sessionId, menuItemId, quantity, notes) => {
-    return createOrder(sessionId, { menuItemId, quantity, notes });
+  const addOrder = useCallback(async (sessionId, data) => {
+    return createOrder(sessionId, data);
   }, []);
 
   const changeStatus = useCallback(async (orderId, status) => {

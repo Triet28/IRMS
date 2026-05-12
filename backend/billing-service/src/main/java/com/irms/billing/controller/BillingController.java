@@ -10,12 +10,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/bills")
 @RequiredArgsConstructor
 public class BillingController {
 
     private final BillingService billingService;
+
+    @GetMapping
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<List<BillDto>> getAllPaid() {
+        return ResponseEntity.ok(billingService.findAllPaid());
+    }
 
     @PostMapping("/session/{sessionId}")
     @PreAuthorize("hasAnyRole('WAITER', 'MANAGER')")

@@ -96,6 +96,13 @@ public class BillingServiceImpl implements BillingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<BillDto> findAllPaid() {
+        return billRepository.findByStatusOrderByPaidAtDesc(BillStatus.PAID)
+                .stream().map(this::toDto).toList();
+    }
+
+    @Override
     @Transactional
     public BillDto processPayment(Long billId, PaymentRequest request) {
         Bill bill = billRepository.findById(billId)

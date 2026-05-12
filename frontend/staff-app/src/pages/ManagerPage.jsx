@@ -8,6 +8,7 @@ import {
   getAllCombos, createCombo, updateCombo,
   getUsers, createUser,
   openSession, closeSession, getOpenSessions, requestBill, createBill, payBill,
+  getAllPaidBills,
 } from '../api/apiClient';
 import Button from '../components/Button';
 import OrderCard from '../components/OrderCard';
@@ -18,6 +19,7 @@ const TABS = [
   { key: 'menu',     label: 'Quản lý menu' },
   { key: 'combo',    label: 'Combo' },
   { key: 'staff',    label: 'Nhân viên' },
+  { key: 'history',  label: 'Lịch sử bill' },
 ];
 
 const STATUS_LABEL = {
@@ -68,6 +70,9 @@ export default function ManagerPage() {
   const [comboSaving, setComboSaving] = useState(false);
   const [comboError, setComboError]   = useState('');
 
+  // history state
+  const [paidBills, setPaidBills] = useState([]);
+
   // staff state
   const [staffList, setStaffList]     = useState([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -86,7 +91,8 @@ export default function ManagerPage() {
       getAllCombos().then(setComboList);
       getAllItems().then(setMenuItemsForCombo);
     }
-    if (activeTab === 'staff') getUsers().then(setStaffList);
+    if (activeTab === 'staff')   getUsers().then(setStaffList);
+    if (activeTab === 'history') getAllPaidBills().then(setPaidBills);
   }, [activeTab]);
 
   useEffect(() => {
@@ -441,6 +447,69 @@ export default function ManagerPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── Tab: History ── */}
+        {activeTab === 'history' && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-gray-700">
+                Lịch sử thanh toán ({paidBills.length})
+              </h2>
+              <Button variant="ghost" onClick={() => getAllPaidBills().then(setPaidBills)}>
+                Làm mới
+              </Button>
+            </div>
+            {paidBills.length === 0 ? (
+              <p className="text-gray-400 text-sm">Chưa có bill nào được thanh toán.</p>
+            ) : (
+              <div className="space-y-3">
+                {paidBills.map(b => (
+                  <div key={b.id} className="border rounded-xl p-4 bg-white">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-gray-800">
+                          Bill #{b.id} — Session #{b.sessionId}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {b.paidAt ? new Date(b.paidAt).toLocaleString('vi-VN') : '—'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-purple-700">
+                          {Number(b.total).toLocaleString('vi-VN')}đ
+                        </p>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                          {b.paymentMethod === 'CASH' ? 'Tiền mặt'
+                            : b.paymentMethod === 'CARD' ? 'Thẻ'
+                            : 'Ví điện tử'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Chi tiết items */}
+                    <div className="mt-2 border-t pt-2 space-y-0.5">
+                      {b.items?.map((item, i) => (
+                        <div key={i} className="flex justify-between text-xs text-gray-500">
+                          <span>{item.itemName} × {item.quantity}</span>
+                          <span>{Number(item.subtotal).toLocaleString('vi-VN')}đ</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-xs text-gray-400 pt-1">
+                        <span>VAT ({Number(b.taxRate * 100).toFixed(0)}%)</span>
+                        <span>+{Number(b.taxAmount).toLocaleString('vi-VN')}đ</span>
+                      </div>
+                      {b.discountAmount > 0 && (
+                        <div className="flex justify-between text-xs text-green-600">
+                          <span>Giảm giá</span>
+                          <span>−{Number(b.discountAmount).toLocaleString('vi-VN')}đ</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

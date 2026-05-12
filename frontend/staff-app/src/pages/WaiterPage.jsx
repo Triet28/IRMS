@@ -7,7 +7,7 @@ import BaseModal from '../components/BaseModal';
 import Button from '../components/Button';
 import {
   openSession, closeSession, getOpenSessions,
-  getAvailableItems, createBill, payBill,
+  getAvailableItems, getAvailableCombos, createBill, payBill,
 } from '../api/apiClient';
 
 const STATUS_LABEL = {
@@ -30,11 +30,14 @@ export default function WaiterPage() {
   const [bill, setBill]                       = useState(null);
   const [tableNumber, setTableNumber]         = useState('');
   const [openError, setOpenError]             = useState('');
-  const [newOrder, setNewOrder]               = useState({ menuItemId: '', quantity: 1, notes: '' });
+  const [orderTab, setOrderTab]               = useState('item'); // 'item' | 'combo'
+  const [combos, setCombos]                   = useState([]);
+  const [newOrder, setNewOrder]               = useState({ menuItemId: '', comboId: '', quantity: 1, notes: '' });
 
   useEffect(() => {
     fetchOpenSessions();
     getAvailableItems().then(setMenuItems);
+    getAvailableCombos().then(setCombos);
   }, []);
 
   useEffect(() => {
@@ -67,10 +70,17 @@ export default function WaiterPage() {
   }
 
   async function handleAddOrder() {
-    if (!selectedSession || !newOrder.menuItemId) return;
-    await addOrder(selectedSession.id, parseInt(newOrder.menuItemId), newOrder.quantity, newOrder.notes);
+    if (!selectedSession) return;
+    if (orderTab === 'item' && !newOrder.menuItemId) return;
+    if (orderTab === 'combo' && !newOrder.comboId) return;
+
+    const data = orderTab === 'item'
+      ? { menuItemId: parseInt(newOrder.menuItemId), quantity: newOrder.quantity, notes: newOrder.notes }
+      : { comboId: parseInt(newOrder.comboId), quantity: newOrder.quantity, notes: newOrder.notes };
+
+    await addOrder(selectedSession.id, data);
     setShowOrderModal(false);
-    setNewOrder({ menuItemId: '', quantity: 1, notes: '' });
+    setNewOrder({ menuItemId: '', comboId: '', quantity: 1, notes: '' });
     fetchSessionOrders(selectedSession.id);
   }
 
@@ -202,18 +212,54 @@ export default function WaiterPage() {
 
       {/* Add Order Modal */}
       {showOrderModal && (
-        <BaseModal title="Gọi món" onClose={() => setShowOrderModal(false)}>
+        <BaseModal title="Gọi món" onClose={() => {
+          setShowOrderModal(false);
+          setOrderTab('item');
+          setNewOrder({ menuItemId: '', comboId: '', quantity: 1, notes: '' });
+        }}>
           <div className="space-y-3">
-            <select className="w-full border rounded-lg px-3 py-2 bg-white"
-              value={newOrder.menuItemId}
-              onChange={e => setNewOrder({ ...newOrder, menuItemId: e.target.value })}>
-              <option value="">Chọn món...</option>
-              {menuItems.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name} — {Number(item.price).toLocaleString('vi-VN')}đ
-                </option>
-              ))}
-            </select>
+            {/* Tab Món / Combo */}
+            <div className="flex gap-2">
+              <button onClick={() => setOrderTab('item')}
+                className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition
+                  ${orderTab === 'item'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                Món đơn
+              </button>
+              <button onClick={() => setOrderTab('combo')}
+                className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition
+                  ${orderTab === 'combo'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                Combo
+              </button>
+            </div>
+
+            {orderTab === 'item' ? (
+              <select className="w-full border rounded-lg px-3 py-2 bg-white"
+                value={newOrder.menuItemId}
+                onChange={e => setNewOrder({ ...newOrder, menuItemId: e.target.value })}>
+                <option value="">Chọn món...</option>
+                {menuItems.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} — {Number(item.price).toLocaleString('vi-VN')}đ
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select className="w-full border rounded-lg px-3 py-2 bg-white"
+                value={newOrder.comboId}
+                onChange={e => setNewOrder({ ...newOrder, comboId: e.target.value })}>
+                <option value="">Chọn combo...</option>
+                {combos.map(combo => (
+                  <option key={combo.id} value={combo.id}>
+                    {combo.name} — {Number(combo.price).toLocaleString('vi-VN')}đ
+                  </option>
+                ))}
+              </select>
+            )}
+
             <div className="flex items-center gap-3">
               <label className="text-sm text-gray-600 w-20">Số lượng</label>
               <input type="number" min="1" value={newOrder.quantity}

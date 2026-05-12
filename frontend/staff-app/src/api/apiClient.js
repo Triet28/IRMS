@@ -38,7 +38,8 @@ export const updateItem        = (id, data)   => api.put(`/api/menu-items/${id}`
 export const getCategories     = ()           => api.get('/api/categories');
 
 // Combo endpoints  (proxied → menu-service:8082)
-export const getAllCombos    = ()           => api.get('/api/combos');
+export const getAllCombos          = ()           => api.get('/api/combos');
+export const getAvailableCombos   = ()           => api.get('/api/combos/available');
 export const createCombo    = (data)       => api.post('/api/combos', data);
 export const updateCombo    = (id, data)   => api.put(`/api/combos/${id}`, data);
 
@@ -56,6 +57,7 @@ export const getPendingOrders  = ()                 => api.get('/api/orders/pend
 export const updateOrderStatus = (orderId, status)  => api.patch(`/api/orders/${orderId}/status`, { status });
 
 // Billing endpoints  (proxied → billing-service:8084)
-export const createBill = (sessionId, data) => api.post(`/api/bills/session/${sessionId}`, data);
-export const getBill    = (sessionId)        => api.get(`/api/bills/session/${sessionId}`);
-export const payBill    = (billId, data)     => api.post(`/api/bills/${billId}/pay`, data);
+export const getAllPaidBills = ()                    => api.get('/api/bills');
+export const createBill     = (sessionId, data)     => api.post(`/api/bills/session/${sessionId}`, data);
+export const getBill        = (sessionId)            => api.get(`/api/bills/session/${sessionId}`);
+export const payBill        = (billId, data)         => api.post(`/api/bills/${billId}/pay`, data);
