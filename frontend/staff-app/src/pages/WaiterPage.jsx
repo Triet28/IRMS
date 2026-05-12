@@ -28,7 +28,6 @@ export default function WaiterPage() {
   const [showOrderModal, setShowOrderModal]   = useState(false);
   const [showBillModal, setShowBillModal]     = useState(false);
   const [bill, setBill]                       = useState(null);
-  const [tableNumber, setTableNumber]         = useState('');
   const [openError, setOpenError]             = useState('');
   const [orderTab, setOrderTab]               = useState('item'); // 'item' | 'combo'
   const [combos, setCombos]                   = useState([]);
@@ -44,25 +43,32 @@ export default function WaiterPage() {
     if (selectedSession) fetchSessionOrders(selectedSession.id);
   }, [selectedSession]);
 
+  // Keep selectedSession in sync when sessions list is refreshed via WebSocket
+  useEffect(() => {
+    if (selectedSession) {
+      const updated = sessions.find(s => s.id === selectedSession.id);
+      if (updated && updated.status !== selectedSession.status) setSelectedSession(updated);
+    }
+  }, [sessions]);
+
   const handleWs = useCallback((topic, payload) => {
     if (payload.event === 'ORDER_STATUS_CHANGED') {
       if (selectedSession) fetchSessionOrders(selectedSession.id);
     }
-    if (payload.event === 'BILL_REQUESTED') fetchOpenSessions();
-  }, [selectedSession, fetchOpenSessions]);
+    if (payload.event === 'BILL_REQUESTED' || payload.event === 'SESSION_OPENED') {
+      fetchOpenSessions();
+    }
+  }, [selectedSession, fetchOpenSessions, fetchSessionOrders]);
 
   useWebSocket(
-    ['/topic/billing', selectedSession ? `/topic/session/${selectedSession.id}` : ''].filter(Boolean),
+    ['/topic/billing', '/topic/sessions', selectedSession ? `/topic/session/${selectedSession.id}` : ''].filter(Boolean),
     handleWs,
   );
 
-  async function handleOpenSession() {
-    const num = parseInt(tableNumber);
-    if (!num || num < 1) return;
+  async function handleOpenTable(num) {
     setOpenError('');
     try {
       await openSession(num);
-      setTableNumber('');
       fetchOpenSessions();
     } catch (e) {
       setOpenError(e?.detail ?? e?.message ?? 'Không thể mở bàn');
@@ -114,58 +120,66 @@ export default function WaiterPage() {
           <Button variant="ghost" onClick={logout}>Đăng xuất</Button>
         </div>
 
-        {/* Open session bar */}
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm border">
-          <p className="text-sm font-medium text-gray-600 mb-2">Mở bàn mới</p>
-          <div className="flex gap-2">
-            <input type="number" placeholder="Số bàn" value={tableNumber}
-              onChange={e => { setTableNumber(e.target.value); setOpenError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handleOpenSession()}
-              className="border rounded-lg px-3 py-2 w-28 focus:outline-none focus:ring-2 focus:ring-blue-400"/>
-            <Button onClick={handleOpenSession}>Mở bàn</Button>
-          </div>
-          {openError && <p className="text-red-500 text-sm mt-1">{openError}</p>}
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          {/* Session list */}
+          {/* Left: table grid */}
           <div>
-            <h2 className="font-semibold mb-3 text-gray-700">
-              Bàn đang hoạt động
-              <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
-                {sessions.length}
-              </span>
-            </h2>
+            <h2 className="font-semibold mb-3 text-gray-700">Sơ đồ bàn</h2>
+            {openError && <p className="text-red-500 text-sm mb-2">{openError}</p>}
 
-            {sessions.length === 0 && (
-              <div className="bg-white rounded-xl p-8 text-center border">
-                <p className="text-3xl mb-2">🪑</p>
-                <p className="text-gray-400 text-sm">Chưa có bàn nào đang mở</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {sessions.map(s => {
-                const badge = STATUS_LABEL[s.status] ?? {};
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(num => {
+                const session = sessions.find(s => s.tableNumber === num);
+                const isSelected = selectedSession?.tableNumber === num;
+                const statusCls = !session
+                  ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  : session.status === 'BILL_REQUESTED'
+                    ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                    : 'bg-green-100 text-green-700 hover:bg-green-200';
                 return (
-                  <div key={s.id}
-                    onClick={() => setSelectedSession(s)}
-                    className={`border rounded-xl p-4 cursor-pointer transition
-                      ${selectedSession?.id === s.id
-                        ? 'border-blue-500 bg-blue-50 shadow'
-                        : 'bg-white hover:bg-blue-50'}`}>
-                    <div className="flex justify-between items-center">
-                      <p className="font-semibold text-gray-800">Bàn {s.tableNumber}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
-                        {badge.text}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">Session #{s.id}</p>
+                  <div key={num}
+                    onClick={() => session ? setSelectedSession(session) : handleOpenTable(num)}
+                    className={`rounded-xl p-3 text-center border-2 cursor-pointer transition select-none
+                      ${isSelected ? 'border-blue-500 shadow-md' : 'border-transparent'}
+                      ${statusCls}`}>
+                    <p className="font-bold text-base">Bàn {num}</p>
+                    <p className="text-xs mt-0.5">
+                      {!session ? 'Trống' : STATUS_LABEL[session.status]?.text}
+                    </p>
                   </div>
                 );
               })}
             </div>
+
+            {/* Actions for selected session */}
+            {selectedSession && (
+              <div className="p-3 border rounded-xl bg-white">
+                <p className="font-semibold text-gray-700 mb-2">
+                  Bàn {selectedSession.tableNumber}
+                  <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-medium
+                    ${STATUS_LABEL[selectedSession.status]?.cls}`}>
+                    {STATUS_LABEL[selectedSession.status]?.text}
+                  </span>
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {selectedSession.status === 'ACTIVE' && (
+                    <Button variant="success" onClick={() => setShowOrderModal(true)}>+ Gọi món</Button>
+                  )}
+                  {(selectedSession.status === 'ACTIVE' || selectedSession.status === 'BILL_REQUESTED') && (
+                    <Button variant="danger" onClick={handleCreateBill}>
+                      {selectedSession.status === 'BILL_REQUESTED' ? 'Xuất bill' : 'Tính tiền'}
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={async () => {
+                    await closeSession(selectedSession.id);
+                    setSelectedSession(null);
+                    fetchOpenSessions();
+                  }} className="text-xs py-1 px-3 text-red-500 border-red-200 hover:bg-red-50">
+                    Đóng bàn
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Orders for selected session */}
@@ -177,19 +191,9 @@ export default function WaiterPage() {
               </div>
             ) : (
               <>
-                <div className="flex justify-between items-center mb-3">
-                  <h2 className="font-semibold text-gray-700">Bàn {selectedSession.tableNumber}</h2>
-                  <div className="flex gap-2">
-                    {selectedSession.status === 'ACTIVE' && (
-                      <Button variant="success" onClick={() => setShowOrderModal(true)}>+ Gọi món</Button>
-                    )}
-                    {(selectedSession.status === 'ACTIVE' || selectedSession.status === 'BILL_REQUESTED') && (
-                      <Button variant="danger" onClick={handleCreateBill}>
-                        {selectedSession.status === 'BILL_REQUESTED' ? 'Xuất bill' : 'Tính tiền'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <h2 className="font-semibold text-gray-700 mb-3">
+                  Orders — Bàn {selectedSession.tableNumber}
+                </h2>
 
                 {orders.length === 0 ? (
                   <p className="text-gray-400 text-sm text-center py-8">Chưa có order nào.</p>

@@ -14,6 +14,8 @@ import Button from '../components/Button';
 import OrderCard from '../components/OrderCard';
 import BaseModal from '../components/BaseModal';
 
+const MAX_TABLES = 10;
+
 const TABS = [
   { key: 'sessions', label: 'Quản lý bàn' },
   { key: 'menu',     label: 'Quản lý menu' },
@@ -38,14 +40,25 @@ export default function ManagerPage() {
     try { setSessions(await getOpenSessions()); } catch {}
   }, [setSessions]);
 
-  // Realtime: refresh session list when customer requests bill
-  useWebSocket(['/topic/billing'], useCallback((_, payload) => {
-    if (payload.event === 'BILL_REQUESTED') fetchOpenSessions();
-  }, [fetchOpenSessions]));
+  const handleWs = useCallback((_, payload) => {
+    if (payload.event === 'BILL_REQUESTED' || payload.event === 'SESSION_OPENED') {
+      fetchOpenSessions();
+    }
+    if (payload.event === 'ORDER_STATUS_CHANGED' && selectedSession) {
+      fetchSessionOrders(selectedSession.id);
+    }
+  }, [fetchOpenSessions, fetchSessionOrders, selectedSession]);
+
+  const wsTopics = [
+    '/topic/billing',
+    '/topic/sessions',
+    selectedSession ? `/topic/session/${selectedSession.id}` : '',
+  ].filter(Boolean);
+
+  useWebSocket(wsTopics, handleWs);
 
   const [activeTab, setActiveTab]           = useState('sessions');
   const [selectedSession, setSelectedSession] = useState(null);
-  const [tableNumber, setTableNumber]         = useState('');
   const [sessionError, setSessionError]       = useState('');
   const [showBillModal, setShowBillModal]     = useState(false);
   const [bill, setBill]                       = useState(null);
@@ -99,14 +112,19 @@ export default function ManagerPage() {
     if (selectedSession) fetchSessionOrders(selectedSession.id);
   }, [selectedSession]);
 
+  // Keep selectedSession in sync when sessions list is refreshed via WebSocket
+  useEffect(() => {
+    if (selectedSession) {
+      const updated = sessions.find(s => s.id === selectedSession.id);
+      if (updated && updated.status !== selectedSession.status) setSelectedSession(updated);
+    }
+  }, [sessions]);
+
   // ── Session handlers ───────────────────────────────────────────────────────
-  async function handleOpenSession() {
-    const num = parseInt(tableNumber);
-    if (!num || num < 1) { setSessionError('Số bàn không hợp lệ'); return; }
+  async function handleOpenTable(num) {
     setSessionError('');
     try {
       await openSession(num);
-      setTableNumber('');
       fetchOpenSessions();
     } catch (e) {
       setSessionError(e?.detail ?? e?.message ?? 'Không thể mở bàn');
@@ -254,7 +272,10 @@ export default function ManagerPage() {
       getUsers().then(setStaffList);
       setStaffForm({ username: '', email: '', password: '', role: 'WAITER' });
     } catch (e) {
-      setStaffError(e?.message ?? 'Không thể tạo tài khoản');
+      const errMsg = e?.errors
+        ? Object.entries(e.errors).map(([f, m]) => `${f}: ${m}`).join(' | ')
+        : (e?.detail ?? e?.message);
+      setStaffError(errMsg ?? 'Không thể tạo tài khoản');
     } finally {
       setStaffSaving(false);
     }
@@ -285,66 +306,69 @@ export default function ManagerPage() {
         {/* ── Tab: Sessions ── */}
         {activeTab === 'sessions' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Left: session list + open session */}
+            {/* Left: table grid */}
             <div>
-              {/* Mở bàn */}
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="number" placeholder="Số bàn" value={tableNumber}
-                  onChange={e => { setTableNumber(e.target.value); setSessionError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && handleOpenSession()}
-                  className="border rounded-lg px-3 py-2 w-28 focus:outline-none focus:ring-2 focus:ring-purple-400"/>
-                <Button onClick={handleOpenSession}>Mở bàn</Button>
-              </div>
+              <h2 className="font-semibold mb-3 text-gray-700">Sơ đồ bàn</h2>
               {sessionError && <p className="text-red-500 text-sm mb-2">{sessionError}</p>}
 
-              <h2 className="font-semibold mb-2 text-gray-700">Bàn đang hoạt động</h2>
-              {sessions.length === 0 && (
-                <p className="text-gray-400 text-sm">Chưa có bàn nào đang mở.</p>
-              )}
-              {sessions.map(s => {
-                const badge = STATUS_LABEL[s.status] ?? {};
-                return (
-                  <div key={s.id} onClick={() => setSelectedSession(s)}
-                    className={`border rounded-xl p-4 mb-2 cursor-pointer transition
-                      ${selectedSession?.id === s.id
-                        ? 'border-purple-500 bg-purple-100 shadow'
-                        : 'bg-white hover:bg-purple-50'}`}>
-                    <div className="flex justify-between items-center">
-                      <p className="font-semibold text-gray-800">Bàn {s.tableNumber}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
-                        {badge.text}
-                      </span>
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                {Array.from({ length: MAX_TABLES }, (_, i) => i + 1).map(num => {
+                  const session = sessions.find(s => s.tableNumber === num);
+                  const isSelected = selectedSession?.tableNumber === num;
+                  const statusCls = !session
+                    ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    : session.status === 'BILL_REQUESTED'
+                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                      : 'bg-green-100 text-green-700 hover:bg-green-200';
+                  return (
+                    <div key={num}
+                      onClick={() => session ? setSelectedSession(session) : handleOpenTable(num)}
+                      className={`rounded-xl p-3 text-center border-2 cursor-pointer transition select-none
+                        ${isSelected ? 'border-purple-500 shadow-md' : 'border-transparent'}
+                        ${statusCls}`}>
+                      <p className="font-bold text-base">Bàn {num}</p>
+                      <p className="text-xs mt-0.5">
+                        {!session ? 'Trống' : STATUS_LABEL[session.status]?.text}
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">Session #{s.id}</p>
-                    {/* Quick actions */}
-                    <div className="flex gap-2 mt-2 flex-wrap" onClick={e => e.stopPropagation()}>
-                      {(s.status === 'ACTIVE' || s.status === 'BILL_REQUESTED') && (
-                        <Button variant="danger" onClick={() => { setSelectedSession(s); handleCreateBill(s); }}
-                          className="text-xs py-1 px-2">
-                          {s.status === 'BILL_REQUESTED' ? 'Xuất bill' : 'Tính tiền'}
-                        </Button>
-                      )}
-                      <Button variant="ghost" onClick={async () => {
-                          await closeSession(s.id);
-                          if (selectedSession?.id === s.id) setSelectedSession(null);
-                          fetchOpenSessions();
-                        }}
-                        className="text-xs py-1 px-2 text-red-500 border-red-200 hover:bg-red-50">
-                        Đóng bàn
+                  );
+                })}
+              </div>
+
+              {/* Actions for selected session */}
+              {selectedSession && (
+                <div className="p-3 border rounded-xl bg-white">
+                  <p className="font-semibold text-gray-700 mb-2">
+                    Bàn {selectedSession.tableNumber}
+                    <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-medium
+                      ${STATUS_LABEL[selectedSession.status]?.cls}`}>
+                      {STATUS_LABEL[selectedSession.status]?.text}
+                    </span>
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {(selectedSession.status === 'ACTIVE' || selectedSession.status === 'BILL_REQUESTED') && (
+                      <Button variant="danger" onClick={() => handleCreateBill(selectedSession)}
+                        className="text-xs py-1 px-3">
+                        {selectedSession.status === 'BILL_REQUESTED' ? 'Xuất bill' : 'Tính tiền'}
                       </Button>
-                    </div>
-                    {/* Customer App QR */}
-                    {s.tableToken && (
-                      <Button variant="ghost"
-                        onClick={e => { e.stopPropagation(); setQrSession(s); }}
-                        className="mt-2 text-xs py-1 px-2 text-blue-600 border-blue-200 hover:bg-blue-50 w-full">
-                        📱 QR Code khách — Bàn {s.tableNumber}
+                    )}
+                    <Button variant="ghost" onClick={async () => {
+                        await closeSession(selectedSession.id);
+                        setSelectedSession(null);
+                        fetchOpenSessions();
+                      }}
+                      className="text-xs py-1 px-3 text-red-500 border-red-200 hover:bg-red-50">
+                      Đóng bàn
+                    </Button>
+                    {selectedSession.tableToken && (
+                      <Button variant="ghost" onClick={() => setQrSession(selectedSession)}
+                        className="text-xs py-1 px-3 text-blue-600 border-blue-200 hover:bg-blue-50">
+                        QR Code
                       </Button>
                     )}
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
 
             {/* Right: orders of selected session */}

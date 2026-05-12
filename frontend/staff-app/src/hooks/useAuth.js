@@ -1,14 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { login } from '../api/apiClient';
 import useAuthStore from '../store/authStore';
 
-/**
- * ISP: hook is focused solely on authentication concerns.
- * Components that only need auth status import this hook —
- * they don't get order/websocket functionality mixed in.
- */
 export function useAuth() {
-  const { user, token, setAuth, logout } = useAuthStore();
+  const { user, token, setAuth, logout: storeLogout } = useAuthStore();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
 
@@ -25,6 +22,11 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function logout() {
+    storeLogout();
+    navigate('/login', { replace: true });
   }
 
   return { user, token, signIn, logout, loading, error };

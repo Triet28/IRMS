@@ -50,7 +50,7 @@ public class SessionServiceImpl implements SessionService {
         String tableToken = jwtTokenProvider.generateTableToken(session.getId(), tableNumber);
         session.setTableToken(tableToken);
         session = sessionRepository.save(session);
-
+        eventPublisher.publishSessionOpened(session.getId(), tableNumber);
         return toDto(session);
     }
 

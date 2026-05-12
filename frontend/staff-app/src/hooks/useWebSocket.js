@@ -2,15 +2,14 @@ import { useEffect, useRef } from 'react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
-/**
- * ISP: hook is focused solely on WebSocket subscription.
- * Components pick only the topics they care about — no coupling to HTTP logic.
- *
- * @param {string[]} topics - e.g. ['/topic/kitchen', '/topic/session/5']
- * @param {function} onMessage - callback(topic, payload)
- */
 export function useWebSocket(topics, onMessage) {
-  const clientRef = useRef(null);
+  const clientRef   = useRef(null);
+  const onMessageRef = useRef(onMessage);
+
+  // Always keep the ref pointing at the latest callback without recreating the socket
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  });
 
   useEffect(() => {
     if (!topics || topics.length === 0) return;
@@ -22,9 +21,9 @@ export function useWebSocket(topics, onMessage) {
         topics.forEach((topic) => {
           client.subscribe(topic, (msg) => {
             try {
-              onMessage(topic, JSON.parse(msg.body));
+              onMessageRef.current(topic, JSON.parse(msg.body));
             } catch {
-              onMessage(topic, msg.body);
+              onMessageRef.current(topic, msg.body);
             }
           });
         });

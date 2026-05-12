@@ -17,7 +17,15 @@ function createClient() {
 
   client.interceptors.response.use(
     (res) => res.data,
-    (err) => Promise.reject(err.response?.data ?? err)
+    (err) => {
+      if (err.response?.status === 401) {
+        import('../store/authStore').then(({ default: useAuthStore }) => {
+          useAuthStore.getState().logout();
+          window.location.replace('/login');
+        });
+      }
+      return Promise.reject(err.response?.data ?? err);
+    }
   );
 
   return client;

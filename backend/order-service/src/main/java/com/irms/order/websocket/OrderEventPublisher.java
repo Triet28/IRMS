@@ -63,6 +63,15 @@ public class OrderEventPublisher {
         );
     }
 
+    // Staff apps subscribe to /topic/sessions to keep the table grid in sync
+    public void publishSessionOpened(Long sessionId, int tableNumber) {
+        messagingTemplate.convertAndSend("/topic/sessions", Map.of(
+                "event", "SESSION_OPENED",
+                "sessionId", sessionId,
+                "tableNumber", tableNumber
+        ));
+    }
+
     // Customer App subscribes to /topic/table/{sessionId} (browser-only, no AMQP needed)
     public void publishSessionClosed(Long sessionId) {
         messagingTemplate.convertAndSend("/topic/table/" + sessionId, Map.of(
