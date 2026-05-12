@@ -20,6 +20,8 @@ docker-compose up --build
 | Order Service  | http://localhost:8083      |
 | Billing Service| http://localhost:8084      |
 | PostgreSQL     | localhost:5432 / db: irms  |
+| Customer(Table number from 1 to 10) App)| http://localhost:3001/table/{table_number}|
+|Staff App| http://localhost:3000
 
 Default admin credentials (seeded on first start):
 - Username: `admin`
