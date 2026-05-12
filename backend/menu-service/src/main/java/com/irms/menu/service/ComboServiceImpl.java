@@ -71,6 +71,23 @@ public class ComboServiceImpl implements ComboService {
         if (request.getDescription() != null) combo.setDescription(request.getDescription());
         if (request.getPrice()       != null) combo.setPrice(request.getPrice());
         if (request.getAvailable()   != null) combo.setAvailable(request.getAvailable());
+
+        // Replace items nếu client gửi danh sách mới
+        if (request.getItems() != null) {
+            combo.getItems().clear();
+            for (UpdateComboRequest.ItemEntry entry : request.getItems()) {
+                MenuItem item = menuItemRepository.findById(entry.getMenuItemId())
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Menu item not found: " + entry.getMenuItemId()));
+                ComboItemEntry comboItem = new ComboItemEntry();
+                comboItem.setId(new ComboItemKey(combo.getId(), item.getId()));
+                comboItem.setCombo(combo);
+                comboItem.setMenuItem(item);
+                comboItem.setQuantity(entry.getQuantity());
+                combo.getItems().add(comboItem);
+            }
+        }
+
         return toDto(comboRepository.save(combo));
     }
 

@@ -216,11 +216,16 @@ export default function ManagerPage() {
     setComboError('');
     try {
       if (editCombo) {
+        const validItems = comboItems.filter(ci => ci.menuItemId);
         await updateCombo(editCombo.id, {
           name: comboForm.name,
           description: comboForm.description,
           price: parseFloat(comboForm.price),
           available: comboForm.available,
+          items: validItems.map(ci => ({
+            menuItemId: parseInt(ci.menuItemId),
+            quantity: ci.quantity,
+          })),
         });
       } else {
         await createCombo({
@@ -608,9 +613,10 @@ export default function ManagerPage() {
               Còn phục vụ
             </label>
 
-            {!editCombo && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Các món trong combo *</p>
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Các món trong combo {!editCombo && '*'}
+              </p>
                 {comboItems.map((ci, idx) => (
                   <div key={idx} className="flex gap-2 mb-2">
                     <select value={ci.menuItemId}
@@ -638,12 +644,11 @@ export default function ManagerPage() {
                     )}
                   </div>
                 ))}
-                <button onClick={() => setComboItems([...comboItems, { menuItemId: '', quantity: 1 }])}
-                  className="text-sm text-blue-600 hover:underline mt-1">
-                  + Thêm món
-                </button>
-              </div>
-            )}
+              <button onClick={() => setComboItems([...comboItems, { menuItemId: '', quantity: 1 }])}
+                className="text-sm text-blue-600 hover:underline mt-1">
+                + Thêm món
+              </button>
+            </div>
 
             <Button className="w-full" disabled={comboSaving} onClick={handleSaveCombo}>
               {comboSaving ? 'Đang lưu...' : 'Lưu'}
